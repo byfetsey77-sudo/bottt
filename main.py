@@ -1,125 +1,90 @@
-import telebot
-from telebot import types
+import discord
+from discord.ext import commands
+from discord.ui import Button, View
+import pyautogui, os, webbrowser, cv2, time, psutil
 from wakeonlan import send_magic_packet
-import os
-import webbrowser
-import pyautogui
-import time
-import psutil
-import cv2 # Webcam için
 
-# --- AYARLARIN ---
-API_TOKEN = '8092265008:AAEtY0F4pE0fEInaMv-qYQZfOa-I-X-5X_U'
+# --- GÜVENLİ TOKEN ALMA ---
+TOKEN = os.getenv("DISCORD_TOKEN") # Burayı böyle bırak, elle dokunma knk
 MAC_ADRESI = '7C:10:C9:4A:2B:65' 
 DIS_IP = '78.182.3.1'
-PORT = 9
 
-bot = telebot.TeleBot(API_TOKEN)
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# ... (Kodun geri kalanı aynı kalsın knk)
 
 # --- FONKSİYONLAR ---
-
 def pencereleri_temizle():
-    """Açık olan tarayıcıları kapatır ve masaüstüne döner."""
     pyautogui.hotkey('win', 'd')
     for proc in psutil.process_iter():
         try:
-            if proc.name() in ["chrome.exe", "msedge.exe", "opera.exe"]:
+            if proc.name() in ["chrome.exe", "msedge.exe", "opera.exe", "brave.exe"]:
                 proc.terminate()
         except: pass
 
-# --- MENÜ ---
-def main_menu():
-    markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
-    btns = [
-        '🖥️ PC AÇ', '📸 Ekran Al', '🔌 PC Kapat',
-        '🔍 Google Ara', '📺 YouTube Aç', '📷 WebCam Al',
-        '🔊 Ses %100', '💬 Mesaj Yolla', '🧹 Temizle',
-        '🔍 Durum', '🔒 Kilitle'
-    ]
-    markup.add(*(types.KeyboardButton(btn) for btn in btns))
-    return markup
+# --- BUTONLU KONTROL PANELİ ---
+class ControlPanel(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🖥️ PC AÇ", style=discord.ButtonStyle.success)
+    async def open_pc(self, interaction: discord.Interaction, button: Button):
+        send_magic_packet(MAC_ADRESI, ip_address=DIS_IP, port=PORT)
+        await interaction.response.send_message("🚀 Sihirli paket fırlatıldı knk!")
+
+    @discord.ui.button(label="📸 Ekran Al", style=discord.ButtonStyle.primary)
+    async def ss_pc(self, interaction: discord.Interaction, button: Button):
+        pyautogui.screenshot("ss.png")
+        await interaction.response.send_message(file=discord.File("ss.png"))
+        os.remove("ss.png")
+
+    @discord.ui.button(label="🧹 Temizle", style=discord.ButtonStyle.secondary)
+    async def clean_pc(self, interaction: discord.Interaction, button: Button):
+        pencereleri_temizle()
+        await interaction.response.send_message("🧼 Masaüstü tertemiz yapıldı.")
+
+    @discord.ui.button(label="🔒 Kilitle", style=discord.ButtonStyle.danger)
+    async def lock_pc(self, interaction: discord.Interaction, button: Button):
+        os.system("rundll32.exe user32.dll,LockWorkStation")
+        await interaction.response.send_message("🔒 PC Kilitlendi.")
 
 # --- KOMUTLAR ---
+@bot.event
+async def on_ready():
+    print(f'Fettah Discord Master ({bot.user}) Aktif!')
+    pencereleri_temizle()
 
-@bot.message_handler(commands=['start', 'panel'])
-def start(message):
-    bot.send_message(message.chat.id, "🛰️ **Fettah Master Kontrol Paneli Yayında!**\nEmrindeyim knk.", 
-                     reply_markup=main_menu(), parse_mode="Markdown")
+@bot.command()
+async def panel(ctx):
+    await ctx.send("🎮 **FETTAH MASTER KONTROL MERKEZİ** 🎮", view=ControlPanel())
 
-@bot.message_handler(func=lambda m: m.text == '🖥️ PC AÇ')
-def wake_up(message):
-    try:
-        send_magic_packet(MAC_ADRESI, ip_address=DIS_IP, port=PORT)
-        bot.reply_to(message, "🚀 Sihirli paket gönderildi!")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Hata: {e}")
+@bot.command()
+async def google(ctx, *, sorgu):
+    webbrowser.open(f"https://www.google.com/search?q={sorgu}")
+    await ctx.send(f"🔎 Google'da **{sorgu}** aranıyor...")
 
-@bot.message_handler(func=lambda m: m.text == '📸 Ekran Al')
-def screenshot(message):
-    ss = pyautogui.screenshot()
-    ss.save("ss.png")
-    with open("ss.png", "rb") as f:
-        bot.send_photo(message.chat.id, f, caption="✅ Ekran görüntüsü alındı.")
+@bot.command()
+async def yt(ctx, *, sorgu):
+    webbrowser.open(f"https://www.youtube.com/results?search_query={sorgu}")
+    await ctx.send(f"🎥 YouTube'da **{sorgu}** açıldı.")
 
-@bot.message_handler(func=lambda m: m.text == '📷 WebCam Al')
-def webcam(message):
+@bot.command()
+async def ses(ctx):
+    for _ in range(50): pyautogui.press('volumeup')
+    await ctx.send("🔊 Ses son seviyeye çekildi!")
+
+@bot.command()
+async def webcam(ctx):
     cap = cv2.VideoCapture(0)
     ret, frame = cap.read()
     if ret:
         cv2.imwrite("cam.jpg", frame)
         cap.release()
-        with open("cam.jpg", "rb") as f:
-            bot.send_photo(message.chat.id, f, caption="✅ Kameradan görüntü alındı.")
+        await ctx.send(file=discord.File("cam.jpg"))
+        os.remove("cam.jpg")
     else:
-        bot.reply_to(message, "❌ Kamera meşgul veya yok.")
+        await ctx.send("❌ Kamera meşgul veya takılı değil knk.")
 
-@bot.message_handler(func=lambda m: m.text == '🧹 Temizle')
-def clean(message):
-    pencereleri_temizle()
-    bot.reply_to(message, "🧹 Masaüstü temizlendi.")
-
-@bot.message_handler(func=lambda m: m.text == '🔊 Ses %100')
-def volume_up(message):
-    for _ in range(50): pyautogui.press('volumeup')
-    bot.reply_to(message, "🔊 Ses köklendi!")
-
-@bot.message_handler(func=lambda m: m.text == '🔒 Kilitle')
-def lock_pc(message):
-    os.system("rundll32.exe user32.dll,LockWorkStation")
-    bot.reply_to(message, "🔒 PC Kilitlendi.")
-
-@bot.message_handler(func=lambda m: m.text == '🔌 PC Kapat')
-def shutdown(message):
-    bot.reply_to(message, "🔌 PC 30 saniye içinde kapanıyor...")
-    os.system("shutdown /s /t 30")
-
-# --- ARAMA MODÜLLERİ ---
-
-@bot.message_handler(func=lambda m: m.text == '🔍 Google Ara')
-def ask_google(message):
-    msg = bot.send_message(message.chat.id, "🔍 Ne arayalım knk? (Kelimeyi yaz gönder)")
-    bot.register_next_step_handler(msg, do_google)
-
-def do_google(message):
-    url = f"https://www.google.com/search?q={message.text}"
-    webbrowser.open(url)
-    bot.reply_to(message, f"✅ '{message.text}' aratıldı.")
-
-@bot.message_handler(func=lambda m: m.text == '📺 YouTube Aç')
-def ask_youtube(message):
-    msg = bot.send_message(message.chat.id, "📺 Ne izleyeceksin? (İsmini yaz gönder)")
-    bot.register_next_step_handler(msg, do_youtube)
-
-def do_youtube(message):
-    url = f"https://www.youtube.com/results?search_query={message.text}"
-    webbrowser.open(url)
-    bot.reply_to(message, f"🎥 '{message.text}' YouTube'da açıldı.")
-
-@bot.message_handler(func=lambda m: m.text == '🔍 Durum')
-def status(message):
-    bot.reply_to(message, "✅ Evdeki PC: AKTİF\n🛰️ Render: BAĞLI")
-
-# PC Açıldığında otomatik temizlik yap
-pencereleri_temizle()
-print("Fettah Master Bot Başlatıldı...")
-bot.polling(none_stop=True)
+bot.run(TOKEN)
