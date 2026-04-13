@@ -1,5 +1,2 @@
 discord.py
-pyautogui
 wakeonlan
-opencv-python-headless
-psutil
