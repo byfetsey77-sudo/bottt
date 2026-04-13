@@ -1,2 +1,5 @@
 pyTelegramBotAPI
 wakeonlan
+opencv-python-headless
+pyautogui
+psutil
