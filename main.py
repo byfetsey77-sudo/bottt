@@ -4,19 +4,19 @@ from discord.ui import Button, View
 import pyautogui, os, webbrowser, cv2, time, psutil
 from wakeonlan import send_magic_packet
 
-# --- GÜVENLİ TOKEN ALMA ---
-TOKEN = os.getenv("DISCORD_TOKEN") # Burayı böyle bırak, elle dokunma knk
+# --- GÜVENLİ TOKEN VE AYARLAR ---
+TOKEN = os.getenv("DISCORD_TOKEN") 
 MAC_ADRESI = '7C:10:C9:4A:2B:65' 
 DIS_IP = '78.182.3.1'
+PORT = 9
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ... (Kodun geri kalanı aynı kalsın knk)
-
 # --- FONKSİYONLAR ---
 def pencereleri_temizle():
+    """Tarayıcıları kapatır ve masaüstüne döner."""
     pyautogui.hotkey('win', 'd')
     for proc in psutil.process_iter():
         try:
@@ -31,14 +31,20 @@ class ControlPanel(View):
 
     @discord.ui.button(label="🖥️ PC AÇ", style=discord.ButtonStyle.success)
     async def open_pc(self, interaction: discord.Interaction, button: Button):
-        send_magic_packet(MAC_ADRESI, ip_address=DIS_IP, port=PORT)
-        await interaction.response.send_message("🚀 Sihirli paket fırlatıldı knk!")
+        try:
+            send_magic_packet(MAC_ADRESI, ip_address=DIS_IP, port=PORT)
+            await interaction.response.send_message("🚀 Sihirli paket fırlatıldı knk!")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Hata: {e}")
 
     @discord.ui.button(label="📸 Ekran Al", style=discord.ButtonStyle.primary)
     async def ss_pc(self, interaction: discord.Interaction, button: Button):
-        pyautogui.screenshot("ss.png")
-        await interaction.response.send_message(file=discord.File("ss.png"))
-        os.remove("ss.png")
+        try:
+            pyautogui.screenshot("ss.png")
+            await interaction.response.send_message(file=discord.File("ss.png"))
+            os.remove("ss.png")
+        except:
+            await interaction.response.send_message("❌ Ekran görüntüsü alınamadı.")
 
     @discord.ui.button(label="🧹 Temizle", style=discord.ButtonStyle.secondary)
     async def clean_pc(self, interaction: discord.Interaction, button: Button):
@@ -50,11 +56,14 @@ class ControlPanel(View):
         os.system("rundll32.exe user32.dll,LockWorkStation")
         await interaction.response.send_message("🔒 PC Kilitlendi.")
 
-# --- KOMUTLAR ---
+# --- OLAYLAR VE KOMUTLAR ---
 @bot.event
 async def on_ready():
     print(f'Fettah Discord Master ({bot.user}) Aktif!')
-    pencereleri_temizle()
+    # PC açıldığında otomatik temizlik yapması için
+    try:
+        pencereleri_temizle()
+    except: pass
 
 @bot.command()
 async def panel(ctx):
@@ -86,5 +95,10 @@ async def webcam(ctx):
         os.remove("cam.jpg")
     else:
         await ctx.send("❌ Kamera meşgul veya takılı değil knk.")
+
+@bot.command()
+async def ac(ctx):
+    send_magic_packet(MAC_ADRESI, ip_address=DIS_IP, port=PORT)
+    await ctx.send("✅ PC açma sinyali gönderildi!")
 
 bot.run(TOKEN)
