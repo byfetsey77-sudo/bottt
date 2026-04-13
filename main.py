@@ -2,8 +2,13 @@ import telebot
 from telebot import types
 from wakeonlan import send_magic_packet
 import os
+import webbrowser
+import pyautogui
+import time
+import psutil
+import cv2 # Webcam için
 
-# --- AYARLARIN (Burayı kendine göre doldur knk) ---
+# --- AYARLARIN ---
 API_TOKEN = '8092265008:AAEtY0F4pE0fEInaMv-qYQZfOa-I-X-5X_U'
 MAC_ADRESI = '7C:10:C9:4A:2B:65' 
 DIS_IP = '78.182.3.1'
@@ -11,55 +16,110 @@ PORT = 9
 
 bot = telebot.TeleBot(API_TOKEN)
 
-# --- KLAVYE MENÜSÜ ---
+# --- FONKSİYONLAR ---
+
+def pencereleri_temizle():
+    """Açık olan tarayıcıları kapatır ve masaüstüne döner."""
+    pyautogui.hotkey('win', 'd')
+    for proc in psutil.process_iter():
+        try:
+            if proc.name() in ["chrome.exe", "msedge.exe", "opera.exe"]:
+                proc.terminate()
+        except: pass
+
+# --- MENÜ ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
-    # Satır 1
-    btn1 = types.KeyboardButton('🖥️ PC AÇ')
-    btn2 = types.KeyboardButton('📸 Ekran Al')
-    btn3 = types.KeyboardButton('🔌 PC Kapat')
-    # Satır 2
-    btn4 = types.KeyboardButton('🔊 Ses %100')
-    btn5 = types.KeyboardButton('💬 Mesaj Yolla')
-    btn6 = types.KeyboardButton('📷 WebCam Al')
-    # Satır 3
-    btn7 = types.KeyboardButton('🛑 Görevi Bitir')
-    btn8 = types.KeyboardButton('🔍 Durum')
-    
-    markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8)
+    btns = [
+        '🖥️ PC AÇ', '📸 Ekran Al', '🔌 PC Kapat',
+        '🔍 Google Ara', '📺 YouTube Aç', '📷 WebCam Al',
+        '🔊 Ses %100', '💬 Mesaj Yolla', '🧹 Temizle',
+        '🔍 Durum', '🔒 Kilitle'
+    ]
+    markup.add(*(types.KeyboardButton(btn) for btn in btns))
     return markup
 
-# /start Komutu
+# --- KOMUTLAR ---
+
 @bot.message_handler(commands=['start', 'panel'])
 def start(message):
-    bot.send_message(message.chat.id, "🛰️ **Fettah Ultra Kontrol Merkezi Yayında!**\n\nPC kapalıyken sadece 'PC AÇ' çalışır. PC açılınca tüm özellikler aktif olur knk.", 
+    bot.send_message(message.chat.id, "🛰️ **Fettah Master Kontrol Paneli Yayında!**\nEmrindeyim knk.", 
                      reply_markup=main_menu(), parse_mode="Markdown")
 
-# 1. PC AÇMA (WOL)
 @bot.message_handler(func=lambda m: m.text == '🖥️ PC AÇ')
 def wake_up(message):
     try:
         send_magic_packet(MAC_ADRESI, ip_address=DIS_IP, port=PORT)
-        bot.reply_to(message, f"🚀 **Sihirli Paket Gönderildi!**\n📍 IP: {DIS_IP}\n⏳ PC uyanıyor, 1-2 dakikaya bağlanır.")
+        bot.reply_to(message, "🚀 Sihirli paket gönderildi!")
     except Exception as e:
-        bot.reply_to(message, f"❌ Paket gitmedi: {e}")
+        bot.reply_to(message, f"❌ Hata: {e}")
 
-# DİĞER KOMUTLAR (Bu komutlar evdeki PC'deki bot tarafından dinlenecek)
-@bot.message_handler(func=lambda m: True)
-def handle_commands(message):
-    chat_id = message.chat.id
-    txt = message.text
+@bot.message_handler(func=lambda m: m.text == '📸 Ekran Al')
+def screenshot(message):
+    ss = pyautogui.screenshot()
+    ss.save("ss.png")
+    with open("ss.png", "rb") as f:
+        bot.send_photo(message.chat.id, f, caption="✅ Ekran görüntüsü alındı.")
 
-    if txt == '🔍 Durum':
-        bot.send_message(chat_id, "📡 **Render Sunucusu:** Aktif ✅\n🖥️ **Evdeki PC:** (PC açılınca 'Ben geldim' yazacaktır)")
-    
-    elif txt == '💬 Mesaj Yolla':
-        bot.send_message(chat_id, "⌨️ PC ekranında ne yazsın? (Örn: /msg Selam knk)")
-        
+@bot.message_handler(func=lambda m: m.text == '📷 WebCam Al')
+def webcam(message):
+    cap = cv2.VideoCapture(0)
+    ret, frame = cap.read()
+    if ret:
+        cv2.imwrite("cam.jpg", frame)
+        cap.release()
+        with open("cam.jpg", "rb") as f:
+            bot.send_photo(message.chat.id, f, caption="✅ Kameradan görüntü alındı.")
     else:
-        # Eğer PC kapalıysa ve bu butonlara basarsan Render "Sinyal gönderildi" der.
-        # Evdeki bot bu mesajı görünce işlemi yapacak.
-        bot.send_message(chat_id, f"📡 **Sinyal Gönderildi:** '{txt}'\n(PC açıksa işlem yapılır knk)")
+        bot.reply_to(message, "❌ Kamera meşgul veya yok.")
 
-print("Render Botu Başlatıldı...")
+@bot.message_handler(func=lambda m: m.text == '🧹 Temizle')
+def clean(message):
+    pencereleri_temizle()
+    bot.reply_to(message, "🧹 Masaüstü temizlendi.")
+
+@bot.message_handler(func=lambda m: m.text == '🔊 Ses %100')
+def volume_up(message):
+    for _ in range(50): pyautogui.press('volumeup')
+    bot.reply_to(message, "🔊 Ses köklendi!")
+
+@bot.message_handler(func=lambda m: m.text == '🔒 Kilitle')
+def lock_pc(message):
+    os.system("rundll32.exe user32.dll,LockWorkStation")
+    bot.reply_to(message, "🔒 PC Kilitlendi.")
+
+@bot.message_handler(func=lambda m: m.text == '🔌 PC Kapat')
+def shutdown(message):
+    bot.reply_to(message, "🔌 PC 30 saniye içinde kapanıyor...")
+    os.system("shutdown /s /t 30")
+
+# --- ARAMA MODÜLLERİ ---
+
+@bot.message_handler(func=lambda m: m.text == '🔍 Google Ara')
+def ask_google(message):
+    msg = bot.send_message(message.chat.id, "🔍 Ne arayalım knk? (Kelimeyi yaz gönder)")
+    bot.register_next_step_handler(msg, do_google)
+
+def do_google(message):
+    url = f"https://www.google.com/search?q={message.text}"
+    webbrowser.open(url)
+    bot.reply_to(message, f"✅ '{message.text}' aratıldı.")
+
+@bot.message_handler(func=lambda m: m.text == '📺 YouTube Aç')
+def ask_youtube(message):
+    msg = bot.send_message(message.chat.id, "📺 Ne izleyeceksin? (İsmini yaz gönder)")
+    bot.register_next_step_handler(msg, do_youtube)
+
+def do_youtube(message):
+    url = f"https://www.youtube.com/results?search_query={message.text}"
+    webbrowser.open(url)
+    bot.reply_to(message, f"🎥 '{message.text}' YouTube'da açıldı.")
+
+@bot.message_handler(func=lambda m: m.text == '🔍 Durum')
+def status(message):
+    bot.reply_to(message, "✅ Evdeki PC: AKTİF\n🛰️ Render: BAĞLI")
+
+# PC Açıldığında otomatik temizlik yap
+pencereleri_temizle()
+print("Fettah Master Bot Başlatıldı...")
 bot.polling(none_stop=True)
